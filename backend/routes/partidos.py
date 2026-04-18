@@ -3,15 +3,24 @@ from db import obtener_conexion
 
 partidos_bp = Blueprint("partidos", __name__)
 
+def codigo_error(codigo, mensaje, descripcion, nivel= "error"):
+    return jsonify({
+        "code": codigo,
+        "message": mensaje,
+        "description": descripcion,
+        "level": nivel
+    }), codigo
 
 
 @partidos_bp.route('/partidos', methods=['POST'])
 def crear_partido():
     datos = request.get_json(silent=True)
     campos_requeridos = {"equipo_local", "equipo_visitante", "fecha", "fase"}
-    if not datos:
-        return jsonify({"error": "Faltan datos requeridos"}), 400
     
+    if not datos or not campos_requeridos.issubset(datos.keys()):
+        return codigo_error(400, "Bad_Request", "Los datos requeridos para crear un partido son incorrectos")
+
+
     conn= obtener_conexion()
     cursor = conn.cursor()
 
@@ -19,16 +28,16 @@ def crear_partido():
         query = "INSERT INTO partidos (equipo_local, equipo_visitante, fecha, fase) VALUES (%s, %s, %s, %s)"
         cursor.execute(query, (datos["equipo_local"], datos["equipo_visitante"], datos["fecha"], datos["fase"]))
         conn.commit()
-        return "" , 201
+        return "Created" , 201
     except Exception as e:
-        return jsonify({"error": f"Error al crear partido: {e}"}), 500
+        return codigo_error(500, "Internal_Server_Error", "Ocurrió un error al crear el partido")
     finally:
         cursor.close()
         conn.close()
 
 
-@partidos_bp.route('/partidos/<int:id>"', methods=['GET'])
-def obtener_partidos(id):
+@partidos_bp.route('/partidos/<int:id>', methods=['GET'])
+def obtener_partido(id):
     conn = obtener_conexion()
     cursor = conn.cursor(dictionary=True)
 
@@ -39,10 +48,10 @@ def obtener_partidos(id):
         if partido:
             return jsonify(partido), 200
         else:
-            return jsonify({"error": "Partido no encontrado"}), 404
+            return codigo_error(404, "Not_Found", "Partido no encontrado")
     except Exception as e:
         print(f"Error al obtener partido: {e}")
-        return jsonify({"error": "Error al obtener partido"}), 500
+        return codigo_error(500, "Internal_Server_Error", "Ocurrió un error al obtener el partido")
     finally:
         cursor.close()
         conn.close()
@@ -60,7 +69,7 @@ def eliminar_partido(id):
         if cursor.rowcount > 0:
             return "" , 204
         else:
-            return jsonify({"error": "Partido no encontrado"}), 404
+            return codigo_error(404, "Not_Found", "Partido no encontrado")
         
     finally:
         cursor.close()
@@ -79,9 +88,9 @@ def remplazar_partido(id):
         if cursor.rowcount > 0:
             return "" , 204
         else:
-            return jsonify({"error": "Partido no encontrado"}), 404
+            return codigo_error(404, "Not_Found", "Partido no encontrado")
     except Exception as e:
-        return jsonify({"error": "Error al actualizar partido"}), 500
+        return codigo_error(500, "Internal_Server_Error", "Ocurrió un error al actualizar el partido")
     finally:
         cursor.close()
         conn.close()
@@ -101,7 +110,7 @@ def actualizar_partido(id):
                 valores.append(datos[campo])
 
         if not campos:
-            return jsonify({"error": "No se proporcionaron campos para actualizar"}), 400
+            return codigo_error(400, "Bad_Request", "No se proporcionaron campos para actualizar")  
         valores.append(id)
         query = f"UPDATE partidos SET {', '.join(campos)} WHERE id = %s"
         cursor.execute(query, valores)
@@ -109,9 +118,9 @@ def actualizar_partido(id):
         if cursor.rowcount > 0:
             return "" , 204
         else:
-            return jsonify({"error": "Partido no encontrado"}), 404
+            return codigo_error(404, "Not_Found", "Partido no encontrado")
     except Exception as e:
-        return jsonify({"error": "Error al actualizar partido"}), 500
+        return codigo_error(500, "Internal_Server_Error", "Ocurrió un error al actualizar el partido")
     finally:
         cursor.close()
         conn.close()
