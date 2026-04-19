@@ -3,6 +3,8 @@ from db import obtener_conexion
 
 partidos_bp = Blueprint("partidos", __name__)
 
+FASES_VALIDAS = {"grupos", "dieciseisavos", "octavos", "cuartos", "semis", "final"}
+
 def codigo_error(codigo, mensaje, descripcion, nivel= "error"):
     return jsonify({
         "code": codigo,
@@ -25,6 +27,9 @@ def listar_partidos():
     if limit < 1 or offset < 0:
         return codigo_error(400, "Bad_Request", "Los parámetros limit debe ser mayor a 0 y offset no puede ser negativo")
     
+    if fase and fase not in FASES_VALIDAS:
+        return codigo_error(400, "Bad_Request", f"La fase debe ser una de: {', '.join(FASES_VALIDAS)}")
+
     query = "SELECT * FROM partidos"
     condiciones = []
     valores = []
@@ -95,6 +100,8 @@ def crear_partido():
     if not datos or not campos_requeridos.issubset(datos.keys()):
         return codigo_error(400, "Bad_Request", "Los datos requeridos para crear un partido son incorrectos")
 
+    if datos["fase"] not in FASES_VALIDAS:
+        return codigo_error(400, "Bad_Request", f"La fase debe ser una de: {', '.join(FASES_VALIDAS)}")
 
     conn= obtener_conexion()
     cursor = conn.cursor()
@@ -121,7 +128,9 @@ def obtener_partido(id):
         cursor.execute(query, (id,))
         partido = cursor.fetchone()
         if partido:
+            partido["fecha"] = str(partido["fecha"])
             return jsonify(partido), 200
+        
         else:
             return codigo_error(404, "Not_Found", "Partido no encontrado")
     except Exception as e:
@@ -153,6 +162,15 @@ def eliminar_partido(id):
 @partidos_bp.route('/partidos/<int:id>', methods=['PUT'])
 def remplazar_partido(id):
     datos = request.get_json(silent=True)
+    campos_requeridos = {"equipo_local", "equipo_visitante", "fecha", "fase"}
+
+    if not datos or not campos_requeridos.issubset(datos.keys()):
+        return codigo_error(400, "Bad_Request", "Los datos requeridos para actualizar un partido son incorrectos")
+    
+    if datos["fase"] not in FASES_VALIDAS:
+        return codigo_error(400, "Bad_Request", f"La fase debe ser una de: {', '.join(FASES_VALIDAS)}")
+
+
     conn = obtener_conexion()
     cursor = conn.cursor()
 
@@ -173,6 +191,12 @@ def remplazar_partido(id):
 @partidos_bp.route('/partidos/<int:id>', methods=['PATCH'])
 def actualizar_partido(id):
     datos = request.get_json(silent=True)
+    
+    if not datos:
+        return codigo_error(400, "Bad_Request", "No se proporcionaron datos para actualizar el partido")
+    if datos["fase"] not in FASES_VALIDAS:
+        return codigo_error(400, "Bad_Request", f"La fase debe ser una de: {', '.join(FASES_VALIDAS)}")
+
     conn = obtener_conexion()
     cursor = conn.cursor()
 
@@ -202,6 +226,38 @@ def actualizar_partido(id):
 
 
                 
+@partidos_bp.route('/partidos/<int:id>/resultado', methods=['POST'])
+def caragar_resultado(id):
+    datos = request.get_json(silent=True)
+    campos_requeridos = {"goles_local", "goles_visitante"}
+
+    if not datos or not campos_requeridos.issubset(datos.keys()):
+        return codigo_error(400, "Bad_Request", "Los datos requeridos para cargar el resultado son incorrectos")
+    
+    if not isinstance(datos["goles_local"], int) or not isinstance(datos["goles_visitante"], int):
+        return codigo_error(400, "Bad_Request", "Los goles deben ser números enteros")
+    
+    if datos["goles_local"] < 0 or datos["goles_visitante"] < 0:
+        return codigo_error(400, "Bad_Request", "Los goles no pueden ser negativos")
+    
+    conn = obtener_conexion()
+    cursor = conn.cursor()
+
+    try:
+        query = "UPDATE partidos SET goles_local = %s, goles_visitante = %s WHERE id = %s"
+        cursor.execute(query, (datos["goles_local"], datos["goles_visitante"], id))
+        conn.commit()
+        if cursor.rowcount > 0:
+            return "" , 204
+        else:
+            return codigo_error(404, "Not_Found", "Partido no encontrado")
+    except Exception as e:
+        return codigo_error(500, "Internal_Server_Error", "Ocurrió un error al cargar el resultado del partido")
+    finally:
+        cursor.close()
+        conn.close()
+
+
 
         
 
